@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Hitech Repair Tracker</title>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<style>
+  :root {
+    --blue: #1a3faa;
+    --blue-light: #2753d4;
+    --blue-pale: #e8eeff;
+    --blue-mid: #c3cefd;
+    --bg: #f0f2f8;
+    --surface: #ffffff;
+    --surface-2: #f5f7ff;
+    --border: rgba(26,63,170,0.12);
+    --border-strong: rgba(26,63,170,0.25);
+    --text: #111827;
+    --text-2: #4b5563;
+    --text-3: #9ca3af;
+    --red: #dc2626;
+    --green: #059669;
+    --amber: #d97706;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow: 0 1px 3px rgba(26,63,170,0.08), 0 4px 16px rgba(26,63,170,0.06);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* Layout */
+  .app-shell { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px; background: var(--blue); min-height: 100vh;
+    display: flex; flex-direction: column; flex-shrink: 0;
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 200;
+  }
+  .sidebar-logo {
+    padding: 20px 18px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .sidebar-logo .brand { color: #fff; font-weight: 600; font-size: 15px; line-height: 1.2; }
+  .sidebar-logo .sub { color: rgba(255,255,255,0.55); font-size: 11px; margin-top: 2px; }
+  .sidebar-logo .logo-icon { font-size: 28px; color: #93b4ff; margin-bottom: 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 18px; color: rgba(255,255,255,0.65);
+    font-size: 13.5px; cursor: pointer; transition: all 0.15s;
+    border-left: 3px solid transparent;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,0.12); color: #fff; border-left-color: #93b4ff; }
+  .nav-item i { font-size: 17px; }
+  .nav-section { padding: 16px 18px 6px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.08em; }
+  .sidebar-footer { margin-top: auto; padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: rgba(255,255,255,0.35); }
+
+  /* Main Content */
+  .main { margin-left: 220px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-title { font-size: 17px; font-weight: 600; color: var(--text); }
+  .topbar-sub { font-size: 12px; color: var(--text-3); margin-top: 1px; }
+  .content { padding: 24px; flex: 1; }
+
+  /* Buttons */
+  button { font-family: 'DM Sans', sans-serif; cursor: pointer; border-radius: var(--radius); font-size: 13.5px; font-weight: 500; transition: all 0.15s; }
+  .btn { padding: 9px 18px; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--blue); color: #fff; border: none; }
+  .btn-primary:hover { background: var(--blue-light); }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface-2); }
+  .btn-danger { background: var(--red); color: #fff; border: none; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn-icon { padding: 7px; background: transparent; border: 1px solid var(--border); color: var(--text-2); }
+  .btn-icon:hover { background: var(--surface-2); border-color: var(--border-strong); }
+
+  /* Cards & Stats */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow); }
+  .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; cursor: pointer; transition: all 0.15s; text-align: left; box-shadow: var(--shadow); }
+  .stat-card:hover { border-color: var(--blue-mid); }
+  .stat-card.active { border-color: var(--blue); background: var(--blue-pale); }
+  .stat-card.active .stat-num { color: var(--blue); }
+  .stat-icon { font-size: 20px; color: var(--text-3); margin-bottom: 8px; }
+  .stat-card.active .stat-icon { color: var(--blue); }
+  .stat-num { font-size: 26px; font-weight: 600; color: var(--text); line-height: 1; }
+  .stat-lbl { font-size: 11.5px; color: var(--text-2); margin-top: 3px; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { background: var(--surface-2); padding: 11px 14px; text-align: left; font-weight: 500; font-size: 11.5px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody td { padding: 11px 14px; color: var(--text); vertical-align: middle; }
+  .td-muted { color: var(--text-2); font-size: 12px; }
+
+  /* Status Badges */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .b-pending { background: #fef3c7; color: #92400e; }
+  .b-out { background: #dbeafe; color: #1e3a8a; }
+  .b-in { background: #ede9fe; color: #4c1d95; }
+  .b-ready { background: #d1fae5; color: #065f46; }
+  .b-done { background: #dcfce7; color: #14532d; }
+
+  /* Form Elements */
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 12px; font-weight: 500; color: var(--text-2); display: block; margin-bottom: 5px; }
+  .form-control { width: 100%; font-family: 'DM Sans', sans-serif; font-size: 13.5px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 9px 12px; outline: none; transition: border-color 0.15s; }
+  .form-control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,63,170,0.08); }
+  textarea.form-control { resize: vertical; min-height: 72px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-section { font-size: 11px; font-weight: 600; color: var(--blue); text-transform: uppercase; letter-spacing: 0.08em; padding: 16px 0 8px; border-top: 1px solid var(--border); margin-top: 8px; }
+  .form-section:first-child { border-top: none; padding-top: 0; }
+
+  /* Overlay Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(10,20,60,0.45); display: flex; align-items: flex-start; justify-content: center; z-index: 999; padding: 20px; overflow-y: auto; }
+  .modal { background: var(--surface); border-radius: var(--radius-lg); width: 100%; max-width: 700px; box-shadow: 0 8px 40px rgba(26,63,170,0.18); position: relative; margin: auto; }
+  .modal-header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .modal-header h2 { font-size: 16px; font-weight: 600; flex: 1; }
+  .modal-body { padding: 20px; max-height: 80vh; overflow-y: auto; }
+  .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+  .close-btn { background: transparent; border: none; font-size: 20px; color: var(--text-3); cursor: pointer; padding: 4px; }
+
+  /* Canvas Drawing Area */
+  .sig-canvas { border: 1px dashed var(--border-strong); border-radius: var(--radius); cursor: crosshair; touch-action: none; width: 100%; display: block; background: var(--surface-2); }
+
+  /* Gallery Thumbs */
+  .img-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .img-thumb { width: 72px; height: 72px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--border); cursor: pointer; }
+  .img-add-btn { width: 72px; height: 72px; border: 1px dashed var(--border-strong); border-radius: var(--radius); background: var(--surface-2); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: var(--text-3); font-size: 11px; gap: 2px; }
+  .img-wrapper { position: relative; }
+  .img-del-btn { position: absolute; top: -5px; right: -5px; background: var(--red); color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; cursor: pointer; line-height: 18px; text-align: center; padding: 0; }
+
+  /* Loading State CSS Spinner */
+  .sync-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .global-loader { position: fixed; bottom: 16px; right: 16px; background: rgba(0,0,0,0.8); color: #fff; padding: 8px 14px; border-radius: 30px; font-size: 12px; display: flex; align-items: center; gap: 8px; z-index: 9999; box-shadow: var(--shadow); }
+
+  /* Timeline & Utilities */
+  .timeline { padding: 0; list-style: none; }
+  .tl-item { display: flex; gap: 12px; padding-bottom: 16px; position: relative; }
+  .tl-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }
+  .tl-dot.done { background: var(--green); color: #fff; }
+  .tl-dot.pending-dot { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-3); }
+  .tl-line { position: absolute; left: 14px; top: 28px; width: 1px; height: calc(100% - 14px); background: var(--border); }
+  .search-bar { position: relative; }
+  .search-bar input { padding-left: 38px; }
+  .search-bar .s-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3); font-size: 16px; }
+  .empty { text-align: center; padding: 48px 24px; color: var(--text-3); }
+  .empty i { font-size: 48px; display: block; margin-bottom: 12px; }
+  .job-id { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-3); }
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .confirm-bar { background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--red); margin-top: 8px; }
+  .product-card { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 12px; background: var(--surface-2); position: relative; }
+  .product-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .product-card-title { font-weight: 600; font-size: 13px; color: var(--blue); }
+
+  @media print {
+    .sidebar, .topbar, .toolbar, .modal-footer, .btn, .global-loader, .stats-grid { display: none !important; }
+    .main { margin-left: 0; }
+    .modal-overlay { position: static; background: none; padding: 0; }
+    .modal { box-shadow: none; max-height: none; }
+  }
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); transition: transform 0.25s; }
+    .sidebar.open { transform: translateX(0); }
+    .main { margin-left: 0; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .form-row { grid-template-columns: 1fr; }
+    .topbar { padding: 12px 16px; }
+    .content { padding: 14px; }
+    .table-cols-hide { display: none; }
+    .mobile-menu-btn { display: flex !important; }
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  }
+  @media (min-width: 769px) { .mobile-menu-btn { display: none !important; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef, useEffect, useMemo } = React;
+
+// ── CONFIGURATION ──
+const API_URL = "https://script.google.com/macros/s/AKfycbxBHb7h4I8C-NBkmn0FKF31inXfXwYiEuAKcH_8Z2Y6OdHD8I9Tr8VKMNQEC9N-PnH2/exec";
+
+const STATUS = { pending: 'Pending Inward', inward: 'Inward Done', out_factory: 'Sent to Factory', in_factory: 'At Factory', received: 'Received from Factory', delivered: 'Delivered' };
+const STATUS_BADGE = { pending: 'b-pending', inward: 'b-pending', out_factory: 'b-out', in_factory: 'b-in', received: 'b-ready', delivered: 'b-done' };
+const STATUS_ICON = { pending: 'ti-clock', inward: 'ti-package-import', out_factory: 'ti-truck', in_factory: 'ti-building-factory-2', received: 'ti-package', delivered: 'ti-circle-check' };
+
+function today() { return new Date().toISOString().split('T')[0]; }
+
+function fmtDate(d) {
+  if (!d) return '—';
+  try {
+    let cleanStr = String(d).trim().split('T')[0];
+    const parts = cleanStr.split('-');
+    if (parts.length !== 3) return d;
+    
+    let dateObj;
+    if (parts[0].length === 4) {
+      dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else {
+      dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+    }
+
+    if (isNaN(dateObj.getTime())) return d;
+    return dateObj.toLocaleDateString('en-IN', { 
+      day: '2-digit', 
+      month: 'short', 
+      year: 'numeric' 
+    });
+  }
+  catch { 
+    return d; 
+  }
+}
+
+function genId() {
+  const d = new Date();
+  return `HP-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${String(Math.floor(Math.random()*9999)).padStart(4,'0')}`;
+}
+
+function calcStatus(j) {
+  if (j.deliveredDate) return 'delivered';
+  if (j.inwardFromFactory) return 'received';
+  if (j.outwardDate) return 'out_factory';
+  if (j.inwardDate) return 'inward';
+  return 'pending';
+}
+
+const EMPTY = { id:'', customerName:'', contact:'', address:'', inwardDate: '', outwardDate:'', inwardFromFactory:'', deliveredDate:'', serialNo:'', productName:'', description:'', problem:'', estimatedCost:'', finalCost:'', images:[], signature:'', notes:'', status:'inward', factoryName:'' };
+
+/* ── Centralized Network API Handler ── */
+async function callBackend(action, data = null) {
+  if (!API_URL || API_URL.includes("PASTE_YOUR_COPIED_WEB_APP_URL_HERE")) {
+    alert("Configuration Error: Please update the script API_URL inside the source file code.");
+    return { success: false };
+  }
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      mode: 'cors',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, data })
+    });
+    return await res.json();
+  } catch (err) {
+    console.error("Backend request failed:", err);
+    alert("Connection error occurred while syncing with Google Sheets.");
+    return { success: false };
+  }
+}
+
+/* ── Signature Capture Pad ── */
+function SignaturePad({ value, onChange }) {
+  const ref = useRef();
+  const drawing = useRef(false);
+  const [has, setHas] = useState(!!value);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.width = ref.current.offsetWidth || 580;
+    ref.current.height = 120;
+    if (value && value.startsWith("data:")) {
+      const img = new Image();
+      img.onload = () => ref.current.getContext('2d').drawImage(img, 0, 0);
+      img.src = value;
+    }
+  }, [value]);
+
+  const pos = (e, c) => {
+    const r = c.getBoundingClientRect();
+    const sx = c.width / r.width;
+    const sy = c.height / r.height;
+    if (e.touches && e.touches.length > 0) return { x:(e.touches[0].clientX-r.left)*sx, y:(e.touches[0].clientY-r.top)*sy };
+    return { x:(e.clientX-r.left)*sx, y:(e.clientY-r.top)*sy };
+  };
+  
+  const start = e => { e.preventDefault(); drawing.current=true; const ctx=ref.current.getContext('2d'); const p=pos(e,ref.current); ctx.beginPath(); ctx.moveTo(p.x,p.y); };
+  const move = e => { e.preventDefault(); if(!drawing.current) return; const ctx=ref.current.getContext('2d'); const p=pos(e,ref.current); ctx.lineWidth=2; ctx.lineCap='round'; ctx.strokeStyle='#1a3faa'; ctx.lineTo(p.x,p.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(p.x,p.y); };
+  const end = e => { e.preventDefault(); if(!drawing.current) return; drawing.current=false; onChange(ref.current.toDataURL()); setHas(true); };
+  const clear = () => { ref.current.getContext('2d').clearRect(0,0,ref.current.width,ref.current.height); onChange(''); setHas(false); };
+
+  return (
+    <div>
+      {value && !value.startsWith("data:") ? (
+        <div style={{padding:8, background:'var(--surface-2)', border:'1px solid var(--border)'}}>
+          <img src={value} alt="Collected Signature" style={{height:100}}/>
+          <button className="btn btn-secondary btn-sm" style={{display:'block',marginTop:4}} onClick={()=>onChange('')}>Re-sign</button>
+        </div>
+      ) : (
+        <>
+          <canvas ref={ref} className="sig-canvas" onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end} onTouchStart={start} onTouchMove={move} onTouchEnd={end}/>
+          <div style={{display:'flex',gap:8,marginTop:8,alignItems:'center'}}>
+            <button className="btn btn-secondary btn-sm" onClick={clear}><i className="ti ti-trash"/> Clear</button>
+            <span style={{fontSize:12,color:has?'var(--green)':'var(--text-3)'}}>{has ? '✓ Signature ready' : 'Draw signature directly above'}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Photo Attachments Handler ── */
+function ImageUpload({ images, onChange }) {
+  const ref = useRef();
+  const add = e => {
+    Array.from(e.target.files).forEach(f => {
+      const r = new FileReader();
+      r.onload = ev => onChange(prev => [...prev, { name: f.name, data: ev.target.result }]);
+      r.readAsDataURL(f);
+    });
+    e.target.value = '';
+  };
+  return (
+    <div>
+      <div className="img-grid">
+        {(images || []).map((img, i) => (
+          <div key={i} className="img-wrapper">
+            <img src={img.data || img} alt={img.name || "Product image"} className="img-thumb" onClick={()=>window.open(img.data || img, '_blank')}/>
+            <button className="img-del-btn" onClick={() => onChange(images.filter((_,j)=>j!==i))}>×</button>
+          </div>
+        ))}
+        <div className="img-add-btn" onClick={() => ref.current.click()}>
+          <i className="ti ti-camera" style={{fontSize:22}}/>
+          <span>Add Photo</span>
+        </div>
+      </div>
+      <input ref={ref} type="file" accept="image/*" multiple style={{display:'none'}} onChange={add}/>
+    </div>
+  );
+}
+
+/* ── Job Input/Edit Form ── */
+function JobForm({ initial, onSave, onSaveMultiple, onCancel }) {
+  const isNew = !initial;
+
+  const formatForInputDate = (dateVal) => {
+    if (!dateVal) return '';
+    let cleanStr = String(dateVal).trim().split('T')[0];
+    const segments = cleanStr.split('-');
+    if (segments.length !== 3) return '';
+    return segments[0].length === 4 ? cleanStr : `${segments[2]}-${segments[1]}-${segments[0]}`;
+  };
+
+  // ── shared customer / dates fields ──
+  const [f, setF] = useState(() => {
+    const baseData = { ...EMPTY, ...initial };
+    return {
+      ...baseData,
+      inwardDate: formatForInputDate(baseData.inwardDate || (isNew ? today() : '')),
+      outwardDate: formatForInputDate(baseData.outwardDate),
+      inwardFromFactory: formatForInputDate(baseData.inwardFromFactory),
+      deliveredDate: formatForInputDate(baseData.deliveredDate),
+      images: Array.isArray(baseData.images) ? baseData.images : []
+    };
+  });
+  const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+
+  // ── product list with separate tracking options (only used in New Entry / batch mode) ──
+  const EMPTY_PRODUCT = { productName:'', serialNo:'', description:'', problem:'', estimatedCost:'', finalCost:'', images:[], factoryName:'', inwardDate: today(), outwardDate: '', inwardFromFactory: '', deliveredDate: '' };
+  const [products, setProducts] = useState([{ ...EMPTY_PRODUCT }]);
+
+  const setProduct = (idx, k, v) => setProducts(prev => {
+    const next = [...prev];
+    next[idx] = { ...next[idx], [k]: v };
+    return next;
+  });
+  const addProduct = () => setProducts(prev => [...prev, { ...EMPTY_PRODUCT }]);
+  const removeProduct = idx => setProducts(prev => prev.filter((_, i) => i !== idx));
+
+  // ── save handler ──
+  const handleSave = () => {
+    if (!f.customerName?.trim()) { alert('Customer Name is required.'); return; }
+
+    if (isNew) {
+      // Batch mode — validate all products
+      for (let i = 0; i < products.length; i++) {
+        if (!products[i].productName?.trim() || !products[i].serialNo?.trim()) {
+          alert(`Product ${i + 1}: Product Name and Serial Number are required.`);
+          return;
+        }
+      }
+      // Build separate job objects for each product, keeping tracking dates itemized
+      const jobs = products.map(p => ({
+        ...EMPTY,
+        id: genId(),
+        customerName: f.customerName,
+        contact: f.contact,
+        address: f.address,
+        notes: f.notes,
+        signature: f.signature,
+        productName: p.productName,
+        serialNo: p.serialNo,
+        description: p.description,
+        problem: p.problem,
+        estimatedCost: p.estimatedCost,
+        finalCost: p.finalCost,
+        factoryName: p.factoryName,
+        inwardDate: p.inwardDate,
+        outwardDate: p.outwardDate,
+        inwardFromFactory: p.inwardFromFactory,
+        deliveredDate: p.deliveredDate,
+        images: p.images || [],
+        status: calcStatus(p),
+      }));
+      onSaveMultiple(jobs);
+    } else {
+      // Single edit mode
+      if (!f.productName?.trim() || !f.serialNo?.trim()) {
+        alert('Product Name and Serial Number are required.');
+        return;
+      }
+      onSave({ ...f, status: calcStatus(f), id: f.id || genId() });
+    }
+  };
+
+  return (
+    <div>
+      <div className="form-section">Customer Info</div>
+      <div className="form-row">
+        <div className="form-group"><label className="form-label">Customer Name *</label><input className="form-control" value={f.customerName||''} onChange={e=>set('customerName',e.target.value)}/></div>
+        <div className="form-group"><label className="form-label">Contact Number</label><input className="form-control" value={f.contact||''} onChange={e=>set('contact',e.target.value)}/></div>
+      </div>
+      <div className="form-group"><label className="form-label">Address (Optional)</label><textarea className="form-control" rows={2} value={f.address||''} onChange={e=>set('address',e.target.value)}/></div>
+
+      {/* ── EDIT MODE: single product fields inline ── */}
+      {!isNew && (
+        <>
+          <div className="form-section">Product Details</div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Product Name *</label><input className="form-control" value={f.productName||''} onChange={e=>set('productName',e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">Serial / Model No *</label><input className="form-control" value={f.serialNo||''} onChange={e=>set('serialNo',e.target.value)}/></div>
+          </div>
+          <div className="form-group"><label className="form-label">Assigned Factory (Free Text)</label><input className="form-control" placeholder="e.g. Factory Alpha, Workshop B..." value={f.factoryName||''} onChange={e=>set('factoryName',e.target.value)}/></div>
+          <div className="form-group"><label className="form-label">Technical Specs & Description</label><textarea className="form-control" value={f.description||''} onChange={e=>set('description',e.target.value)}/></div>
+          <div className="form-group"><label className="form-label">Problem Definition</label><textarea className="form-control" rows={2} value={f.problem||''} onChange={e=>set('problem',e.target.value)}/></div>
+          
+          <div className="form-section">Service Ledger (₹)</div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label" style={{color:'red'}}>Factory Cost</label><input className="form-control" type="number" value={f.estimatedCost||''} onChange={e=>set('estimatedCost',e.target.value)}/></div>
+            <div className="form-group"><label className="form-label" style={{color:'green'}}>Party Cost</label><input className="form-control" type="number" value={f.finalCost||''} onChange={e=>set('finalCost',e.target.value)}/></div>
+          </div>
+
+          <div className="form-section">Dates Tracker</div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Inward Date</label><input className="form-control" type="date" value={f.inwardDate||''} onChange={e=>set('inwardDate',e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">Sent to Factory</label><input className="form-control" type="date" value={f.outwardDate||''} onChange={e=>set('outwardDate',e.target.value)}/></div>
+          </div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Returned from Factory</label><input className="form-control" type="date" value={f.inwardFromFactory||''} onChange={e=>set('inwardFromFactory',e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">Delivery Date</label><input className="form-control" type="date" value={f.deliveredDate||''} onChange={e=>set('deliveredDate',e.target.value)}/></div>
+          </div>
+        </>
+      )}
+
+      {/* ── NEW MODE: multi-product cards ── */}
+      {isNew && (
+        <>
+          <div className="form-section" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span>Products ({products.length})</span>
+            <button className="btn btn-primary btn-sm" onClick={addProduct} style={{marginTop:0}}>
+              <i className="ti ti-plus"/> Add Another Product
+            </button>
+          </div>
+          {products.map((p, idx) => (
+            <div key={idx} style={{border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'14px',marginBottom:12,background:'var(--surface-2)',position:'relative'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                <span style={{fontWeight:600,fontSize:13,color:'var(--blue)'}}>Product {idx + 1} Details</span>
+                {products.length > 1 && (
+                  <button className="btn btn-danger btn-sm" onClick={()=>removeProduct(idx)}>
+                    <i className="ti ti-trash"/> Remove
+                  </button>
+                )}
+              </div>
+              <div className="form-row">
+                <div className="form-group"><label className="form-label">Product Name *</label><input className="form-control" value={p.productName||''} onChange={e=>setProduct(idx,'productName',e.target.value)}/></div>
+                <div className="form-group"><label className="form-label">Serial / Model No *</label><input className="form-control" value={p.serialNo||''} onChange={e=>setProduct(idx,'serialNo',e.target.value)}/></div>
+              </div>
+              <div className="form-group"><label className="form-label">Assigned Factory (Free Text)</label><input className="form-control" placeholder="e.g. Factory Alpha, Workshop B..." value={p.factoryName||''} onChange={e=>setProduct(idx,'factoryName',e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">Description / Specs</label><textarea className="form-control" rows={2} value={p.description||''} onChange={e=>setProduct(idx,'description',e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">Problem Reported</label><textarea className="form-control" rows={2} value={p.problem||''} onChange={e=>setProduct(idx,'problem',e.target.value)}/></div>
+              
+              <div className="form-row">
+                <div className="form-group"><label className="form-label" style={{color:'red'}}>Factory Cost (₹)</label><input className="form-control" type="number" value={p.estimatedCost||''} onChange={e=>setProduct(idx,'estimatedCost',e.target.value)}/></div>
+                <div className="form-group"><label className="form-label" style={{color:'green'}}>Party Cost (₹)</label><input className="form-control" type="number" value={p.finalCost||''} onChange={e=>setProduct(idx,'finalCost',e.target.value)}/></div>
+              </div>
+
+              {/* Individual Itemized Product Tracking Dates */}
+              <div style={{marginTop: 8, padding: '10px', background: 'rgba(26,63,170,0.04)', borderRadius: 'var(--radius)'}}>
+                <span style={{fontSize:'11px', fontWeight:600, color:'var(--text-2)', display:'block', marginBottom:'8px'}}>PRODUCT LOG TRACKER DATES</span>
+                <div className="form-row">
+                  <div className="form-group"><label className="form-label">Inward Date</label><input className="form-control" type="date" value={p.inwardDate||''} onChange={e=>setProduct(idx,'inwardDate',e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">Sent to Factory</label><input className="form-control" type="date" value={p.outwardDate||''} onChange={e=>setProduct(idx,'outwardDate',e.target.value)}/></div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group"><label className="form-label">Returned from Factory</label><input className="form-control" type="date" value={p.inwardFromFactory||''} onChange={e=>setProduct(idx,'inwardFromFactory',e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">Delivery Date</label><input className="form-control" type="date" value={p.deliveredDate||''} onChange={e=>setProduct(idx,'deliveredDate',e.target.value)}/></div>
+                </div>
+              </div>
+
+              <div className="form-group" style={{marginTop: 12}}>
+                <label className="form-label">Product Images</label>
+                <ImageUpload images={p.images||[]} onChange={imgs=>setProduct(idx,'images', typeof imgs==='function'?imgs(p.images||[]):imgs)}/>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      <div className="form-section">Remarks & Storage</div>
+      <div className="form-group"><label className="form-label">Internal Store Notes</label><textarea className="form-control" value={f.notes||''} onChange={e=>set('notes',e.target.value)}/></div>
+
+      {/* Images & signature only shown in main edit mode context */}
+      {!isNew && (
+        <div className="form-group">
+          <label className="form-label">Product Images</label>
+          <ImageUpload images={f.images||[]} onChange={imgs=>set('images', typeof imgs==='function'?imgs(f.images||[]):imgs)}/>
+        </div>
+      )}
+
+      {f.deliveredDate && (
+        <div className="form-group">
+          <label className="form-label">Customer Gate Pass Signature</label>
+          <SignaturePad value={f.signature} onChange={v=>set('signature',v)}/>
+        </div>
+      )}
+
+      <div className="modal-footer" style={{padding:'14px 0 0 0', marginTop:'20px'}}>
+        <button className="btn btn-primary" onClick={handleSave}>
+          <i className="ti ti-device-floppy"/>
+          {isNew ? ` Save ${products.length} Job${products.length>1?'s':''}` : ' Update Job'}
+        </button>
+        <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Detail Logs Modal View ── */
+function JobDetailModal({ job, onEdit, onClose, onDelete }) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [tab, setTab] = useState('info');
+
+  return (
+    <>
+      <div className="modal-header">
+        <i className="ti ti-clipboard-text" style={{fontSize:18,color:'var(--blue)'}}/>
+        <h2>{job.customerName} — {job.productName}</h2>
+        <span className={`badge ${STATUS_BADGE[job.status]}`}>{STATUS[job.status]}</span>
+        <button className="close-btn" onClick={onClose}>×</button>
+      </div>
+      <div className="modal-body">
+        <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+          <button onClick={()=>setTab('info')} className={`btn btn-sm ${tab==='info'?'btn-primary':'btn-secondary'}`}>Data</button>
+          {job.images?.length > 0 && <button onClick={()=>setTab('photos')} className={`btn btn-sm ${tab==='photos'?'btn-primary':'btn-secondary'}`}>Photos ({job.images.length})</button>}
+          {job.signature && <button onClick={()=>setTab('sig')} className={`btn btn-sm ${tab==='sig'?'btn-primary':'btn-secondary'}`}>Signature View</button>}
+        </div>
+
+        {tab==='info' && (
+          <>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:12}}><span className="job-id">{job.id}</span></div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+              <div><strong>Customer:</strong> {job.customerName}</div><div><strong>Contact:</strong> {job.contact || '—'}</div>
+              <div><strong>Product:</strong> {job.productName}</div><div><strong>Serial:</strong> {job.serialNo}</div>
+              <div><strong>Assigned Factory:</strong> {job.factoryName || '—'}</div><div><strong>Status:</strong> {STATUS[job.status]}</div>
+              <div><strong>Est. Cost:</strong> {job.estimatedCost?'₹'+job.estimatedCost:'—'}</div><div><strong>Final Cost:</strong> {job.finalCost?'₹'+job.finalCost:'—'}</div>
+              <div><strong>Inward Date:</strong> {fmtDate(job.inwardDate)}</div><div><strong>Factory Date:</strong> {fmtDate(job.outwardDate)}</div>
+              <div><strong>Returned Date:</strong> {fmtDate(job.inwardFromFactory)}</div><div><strong>Delivered Date:</strong> {fmtDate(job.deliveredDate)}</div>
+            </div>
+            {job.problem && <div style={{marginTop:12}}><strong>Problem Logged:</strong><p style={{fontSize:13,color:'var(--text-2)'}}>{job.problem}</p></div>}
+            {job.notes && <div style={{marginTop:8}}><strong>Internal Remarks:</strong><p style={{fontSize:13,color:'var(--text-3)'}}>{job.notes}</p></div>}
+          </>
+        )}
+
+        {tab==='photos' && (
+          <div className="img-grid">
+            {job.images.map((img,i)=>(
+              <img key={i} src={img.data || img} alt="Log link" className="img-thumb" style={{width:140,height:140}} onClick={()=>window.open(img.data || img, '_blank')}/>
+            ))}
+          </div>
+        )}
+
+        {tab==='sig' && job.signature && (
+          <div style={{textAlign:'center'}}><img src={job.signature} alt="Sign View" style={{maxWidth:'100%',border:'1px solid var(--border)',borderRadius:'var(--radius)'}}/></div>
+        )}
+
+        {confirmDel && (
+          <div className="confirm-bar">
+            <span>Confirm permanent spreadsheet removal?</span>
+            <button className="btn btn-danger btn-sm" onClick={onDelete}>Delete Row</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setConfirmDel(false)}>Cancel</button>
+          </div>
+        )}
+      </div>
+      <div className="modal-footer">
+        <button className="btn btn-primary" onClick={onEdit}><i className="ti ti-edit"/> Edit</button>
+        <button className="btn btn-secondary" onClick={()=>window.print()}><i className="ti ti-printer"/> Print Document</button>
+        {!confirmDel && <button className="btn btn-danger btn-sm" onClick={()=>setConfirmDel(true)} style={{marginLeft:'auto'}}>Delete Job</button>}
+      </div>
+    </>
+  );
+}
+
+/* ── Application Entry shell wrapper ── */
+function AppWrapper() {
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [page, setPage] = useState('jobs');
+  const [formKey, setFormKey] = useState(0);
+
+  const loadFromSheets = async () => {
+    setLoading(true);
+    try {
+      const res = await callBackend("getJobs");
+      if (res && res.success && Array.isArray(res.jobs)) {
+        setJobs(res.jobs);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFromSheets();
+  }, []);
+
+  const stats = useMemo(() => ({
+    all: jobs.length,
+    inward: jobs.filter(j=>j.status==='inward'||j.status==='pending').length,
+    out_factory: jobs.filter(j=>j.status==='out_factory'||j.status==='in_factory').length,
+    received: jobs.filter(j=>j.status==='received').length,
+    delivered: jobs.filter(j=>j.status==='delivered').length,
+  }), [jobs]);
+
+  const filtered = useMemo(() => {
+    if (!jobs) return [];
+    
+    const safeString = (val) => {
+      if (val === null || val === undefined) return '';
+      return String(val).toLowerCase();
+    };
+
+    const q = safeString(search).trim();
+    
+    return jobs.filter(j => {
+      const matchQuery = !q || [
+        safeString(j.customerName),
+        safeString(j.contact),
+        safeString(j.serialNo),
+        safeString(j.productName),
+        safeString(j.factoryName),
+        safeString(j.id)
+      ].some(text => text.includes(q)) || 
+      safeString(fmtDate(j.inwardDate)).includes(q);
+      
+      const matchStatus = filterStatus === 'all' || j.status === filterStatus;
+      return matchQuery && matchStatus;
+    }).sort((a,b)=>b.id.localeCompare(a.id));
+  }, [jobs, search, filterStatus]);
+
+  const handleSaveJob = async (updatedJob) => {
+    setJobs(prev => {
+      const idx = prev.findIndex(x => x.id === updatedJob.id);
+      if (idx >= 0) { const n = [...prev]; n[idx] = updatedJob; return n; }
+      return [updatedJob, ...prev];
+    });
+    setSelected(updatedJob);
+    setModal(null);
+    setLoading(true);
+    await callBackend("saveJob", updatedJob);
+    setLoading(false);
+  };
+
+  const handleSaveMultiple = async (newJobs) => {
+    setJobs(prev => [...newJobs, ...prev]);
+    setModal(null);
+    setLoading(true);
+    for (const job of newJobs) {
+      await callBackend("saveJob", job);
+    }
+    setLoading(false);
+  };
+
+  const deleteJob = async () => {
+    if (!selected) return;
+    const deletedId = selected.id;
+    setJobs(prev => prev.filter(j => j.id !== deletedId));
+    setModal(null);
+    setSelected(null);
+    setLoading(true);
+    await callBackend("deleteJob", { id: deletedId });
+    setLoading(false);
+  };
+
+  return (
+    <div className="app-shell">
+      {loading && <div className="global-loader"><div className="sync-spinner"/> Syncing Google Sheets...</div>}
+      
+      <nav className="sidebar">
+        <div className="sidebar-logo">
+          <i className="ti ti-settings-2 logo-icon"/>
+          <div className="brand">Hitech Pumps<br/>&amp; Motors</div>
+          <div className="sub">Cloud Repair Core</div>
+        </div>
+        <div style={{paddingTop:8}}>
+          <div className="nav-section">Menu</div>
+          <div className={`nav-item ${page==='jobs'?'active':''}`} onClick={()=>setPage('jobs')}><i className="ti ti-clipboard-list"/> All Logs</div>
+          <div className="nav-item" onClick={loadFromSheets}><i className="ti ti-refresh"/> Refresh Sheet</div>
+        </div>
+        <div className="sidebar-footer">Cloud Sync Active</div>
+      </nav>
+
+      <div className="main">
+        <div className="topbar">
+          <div style={{flex:1}}>
+            <div className="topbar-title">Hitech Cloud Tracking System</div>
+            <div className="topbar-sub">{loading ? "Refreshing..." : `Connected Live: ${jobs.length} total entries`}</div>
+          </div>
+          <button className="btn btn-primary" onClick={()=>{setSelected(null); setModal('new'); setFormKey(k=>k+1);}}><i className="ti ti-plus"/> New Entry</button>
+        </div>
+
+        <div className="content">
+          <div className="stats-grid">
+            <button className={`stat-card ${filterStatus==='all'?'active':''}`} onClick={()=>setFilterStatus('all')}>
+              <i className="ti ti-folders stat-icon"/>
+              <div className="stat-num">{stats.all}</div>
+              <div className="stat-lbl">Total Registered</div>
+            </button>
+            <button className={`stat-card ${filterStatus==='inward'?'active':''}`} onClick={()=>setFilterStatus('inward')}>
+              <i className="ti ti-package-import stat-icon"/>
+              <div className="stat-num">{stats.inward}</div>
+              <div className="stat-lbl">Inward / Shop</div>
+            </button>
+            <button className={`stat-card ${filterStatus==='out_factory'?'active':''}`} onClick={()=>setFilterStatus('out_factory')}>
+              <i className="ti ti-building-factory-2 stat-icon"/>
+              <div className="stat-num">{stats.out_factory}</div>
+              <div className="stat-lbl">Sent to Factory</div>
+            </button>
+            <button className={`stat-card ${filterStatus==='received'?'active':''}`} onClick={()=>setFilterStatus('received')}>
+              <i className="ti ti-package stat-icon"/>
+              <div className="stat-num">{stats.received}</div>
+              <div className="stat-lbl">Ready to Collect</div>
+            </button>
+            <button className={`stat-card ${filterStatus==='delivered'?'active':''}`} onClick={()=>setFilterStatus('delivered')}>
+              <i className="ti ti-circle-check stat-icon"/>
+              <div className="stat-num">{stats.delivered}</div>
+              <div className="stat-lbl">Delivered Items</div>
+            </button>
+          </div>
+
+          <div className="toolbar">
+            <div className="search-bar" style={{flex:1}}>
+              <i className="ti ti-search s-icon"/>
+              <input className="form-control" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search database across device lines or factory assignments..."/>
+            </div>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job ID</th>
+                  <th>Customer</th>
+                  <th>Product</th>
+                  <th className="table-cols-hide">Serial No</th>
+                  <th className="table-cols-hide">Factory</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(j=>(
+                  <tr key={j.id} onClick={()=>{setSelected(j); setModal('detail');}}>
+                    <td><span className="job-id">{j.id}</span></td>
+                    <td><strong>{j.customerName}</strong><div className="td-muted">{j.contact}</div></td>
+                    <td>{j.productName}</td>
+                    <td className="table-cols-hide job-id">{j.serialNo}</td>
+                    <td className="table-cols-hide td-muted">{j.factoryName || '—'}</td>
+                    <td><span className={`badge ${STATUS_BADGE[j.status]}`}>{STATUS[j.status]}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {(modal==='new' || modal==='edit') && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h2>{modal==='new' ? 'Add Sheet Log' : 'Modify Row Data'}</h2>
+              <button className="close-btn" onClick={()=>{setModal(null); setSelected(null);}}>×</button>
+            </div>
+            <div className="modal-body">
+              <JobForm key={formKey} initial={modal==='edit'?selected:null} onSave={handleSaveJob} onSaveMultiple={handleSaveMultiple} onCancel={()=>{setModal(null); setSelected(null);}}/>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal==='detail' && selected && (
+        <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget){setModal(null);setSelected(null);}}}>
+          <div className="modal">
+            <JobDetailModal job={selected} onEdit={()=>{ const fresh = jobs.find(j=>j.id===selected.id) || selected; setSelected(fresh); setModal('edit'); setFormKey(k=>k+1); }} onClose={()=>{setModal(null); setSelected(null);}} onDelete={deleteJob}/>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<AppWrapper/>);
+</script>
+</body>
+</html>
