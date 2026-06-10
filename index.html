@@ -177,6 +177,12 @@
   .job-id { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-3); }
   .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
   .confirm-bar { background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--red); margin-top: 8px; }
+  .ac-wrap { position: relative; }
+  .ac-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(26,63,170,0.12); z-index: 9000; max-height: 180px; overflow-y: auto; }
+  .ac-item { padding: 9px 12px; font-size: 13px; cursor: pointer; color: var(--text); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .ac-item:last-child { border-bottom: none; }
+  .ac-item:hover, .ac-item.active { background: var(--blue-pale); color: var(--blue); }
+  .ac-item i { font-size: 13px; color: var(--text-3); flex-shrink: 0; }
   .product-card { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 12px; background: var(--surface-2); position: relative; }
   .product-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .product-card-title { font-weight: 600; font-size: 13px; color: var(--blue); }
@@ -257,28 +263,94 @@ function calcStatus(j) {
   return 'pending';
 }
 
-const EMPTY = { id:'', customerName:'', contact:'', address:'', inwardDate: '', outwardDate:'', inwardFromFactory:'', deliveredDate:'', serialNo:'', productName:'', description:'', problem:'', estimatedCost:'', finalCost:'', images:[], signature:'', notes:'', status:'inward', factoryName:'' };
+const EMPTY = { id:'', customerName:'', contact:'', address:'', inwardDate: '', outwardDate:'', inwardFromFactory:'', deliveredDate:'', serialNo:'', productName:'', description:'', problem:'', estimatedCost:'', finalCost:'', quantity:'1', images:[], signature:'', notes:'', status:'inward', factoryName:'' };
+
+// STATUS display values → keys (handles jobs edited manually in the sheet)
+const STATUS_REVERSE = {};
+Object.entries(STATUS).forEach(([k,v]) => { STATUS_REVERSE[v.toLowerCase()] = k; });
+
+// Normalize a job coming from the sheet — cleans IDs, fixes status, parses images
+function normalizeJob(job) {
+  const j = { ...EMPTY, ...job };
+
+  // Stringify ALL scalar fields — Google Sheets returns numbers for anything it recognises as numeric
+  // e.g. serialNo "AC 50-2" stored as number, estimatedCost, contact, etc.
+  const skipStringify = ['images']; // keep arrays as-is
+  Object.keys(j).forEach(k => {
+    if (!skipStringify.includes(k) && j[k] !== null && j[k] !== undefined && !Array.isArray(j[k])) {
+      j[k] = String(j[k]).trim();
+    }
+  });
+
+  // Fix status — if it's a display label (e.g. "Inward Done"), convert back to key (e.g. "inward")
+  const statusKey = STATUS_REVERSE[j.status.toLowerCase()];
+  if (statusKey) {
+    j.status = statusKey;
+  } else if (!STATUS[j.status]) {
+    j.status = calcStatus(j);
+  }
+
+  // Ensure images is always an array
+  if (typeof j.images === 'string') {
+    try { j.images = JSON.parse(j.images); } catch { j.images = []; }
+  }
+  if (!Array.isArray(j.images)) j.images = [];
+
+  return j;
+}
 
 /* ── Centralized Network API Handler ── */
 async function callBackend(action, data = null) {
   if (!API_URL || API_URL.includes("PASTE_YOUR_COPIED_WEB_APP_URL_HERE")) {
-    alert("Configuration Error: Please update the script API_URL inside the source file code.");
+    alert("Configuration Error: Please update the API_URL at the top of the script.");
     return { success: false };
   }
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      mode: 'cors',
-      redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, data })
-    });
-    return await res.json();
-  } catch (err) {
-    console.error("Backend request failed:", err);
-    alert("Connection error occurred while syncing with Google Sheets.");
-    return { success: false };
+  // Google Apps Script requires no-cors mode for POST — we use a text/plain body
+  // to avoid preflight, and handle the redirect manually
+  const MAX_RETRIES = 3;
+  let lastErr = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, data })
+      });
+
+      // Read as text first — if Google returns an HTML error page, json() would throw
+      const text = await res.text();
+
+      // Check if we got an HTML error page instead of JSON
+      if (text.trim().startsWith('<')) {
+        console.error(`Attempt ${attempt}: Got HTML response instead of JSON. Google may be redirecting or throttling.`);
+        lastErr = "Google returned an error page instead of JSON.";
+        // Wait before retrying
+        if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 1500 * attempt));
+        continue;
+      }
+
+      const parsed = JSON.parse(text);
+
+      // If the script returned an error, log it clearly
+      if (!parsed.success && parsed.error) {
+        console.error(`Apps Script error (${action}):`, parsed.error);
+        if (parsed.stack) console.error("Stack:", parsed.stack);
+      }
+
+      return parsed;
+
+    } catch (err) {
+      console.error(`Attempt ${attempt} failed (${action}):`, err);
+      lastErr = err.message;
+      if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
   }
+
+  // All retries failed
+  console.error(`All ${MAX_RETRIES} attempts failed for action: ${action}. Last error: ${lastErr}`);
+  return { success: false, error: lastErr };
 }
 
 /* ── Signature Capture Pad ── */
@@ -361,9 +433,62 @@ function ImageUpload({ images, onChange }) {
   );
 }
 
+/* ── Autocomplete Input ── */
+function AutocompleteInput({ value, onChange, suggestions, placeholder, icon }) {
+  const [open, setOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
+  const ref = useRef();
+
+  const filtered = useMemo(() => {
+    if (!value || !suggestions) return [];
+    const q = value.toLowerCase();
+    return [...new Set(suggestions.filter(s => s && s.toLowerCase().includes(q) && s.toLowerCase() !== q))].slice(0, 8);
+  }, [value, suggestions]);
+
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const select = (val) => { onChange(val); setOpen(false); setHighlighted(-1); };
+
+  const onKeyDown = e => {
+    if (!open || !filtered.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted(h => Math.min(h+1, filtered.length-1)); }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setHighlighted(h => Math.max(h-1, 0)); }
+    if (e.key === 'Enter' && highlighted >= 0) { e.preventDefault(); select(filtered[highlighted]); }
+    if (e.key === 'Escape') setOpen(false);
+  };
+
+  return (
+    <div className="ac-wrap" ref={ref}>
+      <input
+        className="form-control"
+        value={value||''}
+        placeholder={placeholder}
+        onChange={e => { onChange(e.target.value); setOpen(true); setHighlighted(-1); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+        autoComplete="off"
+      />
+      {open && filtered.length > 0 && (
+        <div className="ac-dropdown">
+          {filtered.map((s, i) => (
+            <div key={s} className={`ac-item ${i===highlighted?'active':''}`} onMouseDown={()=>select(s)}>
+              <i className={`ti ${icon||'ti-history'}`}/>{s}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Job Input/Edit Form ── */
-function JobForm({ initial, onSave, onSaveMultiple, onCancel }) {
-  const isNew = !initial;
+function JobForm({ initial, isNew, onSave, onSaveMultiple, onCancel, saveRef, labelRef, suggestions }) {
+  // isNew is passed explicitly from FormModal — don't recalculate from initial
+  // because initial can be a valid object even for new entries
 
   const formatForInputDate = (dateVal) => {
     if (!dateVal) return '';
@@ -388,7 +513,7 @@ function JobForm({ initial, onSave, onSaveMultiple, onCancel }) {
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
 
   // ── product list with separate tracking options (only used in New Entry / batch mode) ──
-  const EMPTY_PRODUCT = { productName:'', serialNo:'', description:'', problem:'', estimatedCost:'', finalCost:'', images:[], factoryName:'', inwardDate: today(), outwardDate: '', inwardFromFactory: '', deliveredDate: '' };
+  const EMPTY_PRODUCT = { productName:'', serialNo:'', description:'', problem:'', estimatedCost:'', finalCost:'', quantity:'1', images:[], factoryName:'', inwardDate: today(), outwardDate: '', inwardFromFactory: '', deliveredDate: '' };
   const [products, setProducts] = useState([{ ...EMPTY_PRODUCT }]);
 
   const setProduct = (idx, k, v) => setProducts(prev => {
@@ -406,7 +531,7 @@ function JobForm({ initial, onSave, onSaveMultiple, onCancel }) {
     if (isNew) {
       // Batch mode — validate all products
       for (let i = 0; i < products.length; i++) {
-        if (!products[i].productName?.trim() || !products[i].serialNo?.trim()) {
+        if (!String(products[i].productName||'').trim() || !String(products[i].serialNo||'').trim()) {
           alert(`Product ${i + 1}: Product Name and Serial Number are required.`);
           return;
         }
@@ -422,6 +547,7 @@ function JobForm({ initial, onSave, onSaveMultiple, onCancel }) {
         signature: f.signature,
         productName: p.productName,
         serialNo: p.serialNo,
+        quantity: p.quantity || '1',
         description: p.description,
         problem: p.problem,
         estimatedCost: p.estimatedCost,
@@ -436,33 +562,49 @@ function JobForm({ initial, onSave, onSaveMultiple, onCancel }) {
       }));
       onSaveMultiple(jobs);
     } else {
-      // Single edit mode
-      if (!f.productName?.trim() || !f.serialNo?.trim()) {
+      // Single edit mode — always use the original ID from initial, never regenerate it
+      // Convert all fields to string first — Google Sheets may return numbers instead of strings
+      const safeF = Object.fromEntries(
+        Object.entries(f).map(([k, v]) => [k, (v === null || v === undefined || Array.isArray(v)) ? v : (typeof v === 'object' ? v : String(v))])
+      );
+      if (!safeF.productName?.trim() || !safeF.serialNo?.trim()) {
         alert('Product Name and Serial Number are required.');
         return;
       }
-      onSave({ ...f, status: calcStatus(f), id: f.id || genId() });
+      const originalId = String(initial?.id || safeF.id || '').trim();
+      if (!originalId) {
+        alert('This job is missing an ID and cannot be updated. Please delete and re-add it.');
+        return;
+      }
+      onSave({ ...safeF, id: originalId, status: calcStatus(safeF) });
     }
   };
+
+  // Expose save function to parent modal via ref — runs after every render so label stays fresh
+  React.useEffect(() => {
+    if (saveRef) saveRef.current = handleSave;
+    if (labelRef && labelRef.set) labelRef.set(isNew ? `Save ${products.length} Job${products.length>1?'s':''}` : 'Update Job');
+  });
 
   return (
     <div>
       <div className="form-section">Customer Info</div>
       <div className="form-row">
-        <div className="form-group"><label className="form-label">Customer Name *</label><input className="form-control" value={f.customerName||''} onChange={e=>set('customerName',e.target.value)}/></div>
-        <div className="form-group"><label className="form-label">Contact Number</label><input className="form-control" value={f.contact||''} onChange={e=>set('contact',e.target.value)}/></div>
+        <div className="form-group"><label className="form-label">Customer Name *</label><AutocompleteInput value={f.customerName||''} onChange={v=>{set('customerName',v); const match=suggestions?.customerMap?.[v]; if(match){set('contact',match.contact||f.contact); set('address',match.address||f.address);}}} suggestions={suggestions?.customerNames} placeholder="Start typing customer name..." icon="ti-user"/></div>
+        <div className="form-group"><label className="form-label">Contact Number</label><AutocompleteInput value={f.contact||''} onChange={v=>set('contact',v)} suggestions={suggestions?.contacts} placeholder="Phone number" icon="ti-phone"/></div>
       </div>
-      <div className="form-group"><label className="form-label">Address (Optional)</label><textarea className="form-control" rows={2} value={f.address||''} onChange={e=>set('address',e.target.value)}/></div>
+      <div className="form-group"><label className="form-label">Address (Optional)</label><AutocompleteInput value={f.address||''} onChange={v=>set('address',v)} suggestions={suggestions?.addresses} placeholder="Customer address" icon="ti-map-pin"/></div>
 
       {/* ── EDIT MODE: single product fields inline ── */}
       {!isNew && (
         <>
           <div className="form-section">Product Details</div>
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Product Name *</label><input className="form-control" value={f.productName||''} onChange={e=>set('productName',e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">Product Name *</label><AutocompleteInput value={f.productName||''} onChange={v=>set('productName',v)} suggestions={suggestions?.productNames} placeholder="e.g. Centrifugal Pump" icon="ti-tool"/></div>
             <div className="form-group"><label className="form-label">Serial / Model No *</label><input className="form-control" value={f.serialNo||''} onChange={e=>set('serialNo',e.target.value)}/></div>
           </div>
-          <div className="form-group"><label className="form-label">Assigned Factory (Free Text)</label><input className="form-control" placeholder="e.g. Factory Alpha, Workshop B..." value={f.factoryName||''} onChange={e=>set('factoryName',e.target.value)}/></div>
+          <div className="form-group" style={{maxWidth:160}}><label className="form-label">Quantity</label><input className="form-control" type="number" min="1" value={f.quantity||'1'} onChange={e=>set('quantity',e.target.value)}/></div>
+          <div className="form-group"><label className="form-label">Assigned Factory (Free Text)</label><AutocompleteInput value={f.factoryName||''} onChange={v=>set('factoryName',v)} suggestions={suggestions?.factoryNames} placeholder="e.g. Mehta Engineering..." icon="ti-building-factory-2"/></div>
           <div className="form-group"><label className="form-label">Technical Specs & Description</label><textarea className="form-control" value={f.description||''} onChange={e=>set('description',e.target.value)}/></div>
           <div className="form-group"><label className="form-label">Problem Definition</label><textarea className="form-control" rows={2} value={f.problem||''} onChange={e=>set('problem',e.target.value)}/></div>
           
@@ -504,10 +646,11 @@ function JobForm({ initial, onSave, onSaveMultiple, onCancel }) {
                 )}
               </div>
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Product Name *</label><input className="form-control" value={p.productName||''} onChange={e=>setProduct(idx,'productName',e.target.value)}/></div>
+                <div className="form-group"><label className="form-label">Product Name *</label><AutocompleteInput value={p.productName||''} onChange={v=>setProduct(idx,'productName',v)} suggestions={suggestions?.productNames} placeholder="e.g. Centrifugal Pump" icon="ti-tool"/></div>
                 <div className="form-group"><label className="form-label">Serial / Model No *</label><input className="form-control" value={p.serialNo||''} onChange={e=>setProduct(idx,'serialNo',e.target.value)}/></div>
               </div>
-              <div className="form-group"><label className="form-label">Assigned Factory (Free Text)</label><input className="form-control" placeholder="e.g. Factory Alpha, Workshop B..." value={p.factoryName||''} onChange={e=>setProduct(idx,'factoryName',e.target.value)}/></div>
+              <div className="form-group" style={{maxWidth:160}}><label className="form-label">Quantity</label><input className="form-control" type="number" min="1" value={p.quantity||'1'} onChange={e=>setProduct(idx,'quantity',e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">Assigned Factory (Free Text)</label><AutocompleteInput value={p.factoryName||''} onChange={v=>setProduct(idx,'factoryName',v)} suggestions={suggestions?.factoryNames} placeholder="e.g. Mehta Engineering..." icon="ti-building-factory-2"/></div>
               <div className="form-group"><label className="form-label">Description / Specs</label><textarea className="form-control" rows={2} value={p.description||''} onChange={e=>setProduct(idx,'description',e.target.value)}/></div>
               <div className="form-group"><label className="form-label">Problem Reported</label><textarea className="form-control" rows={2} value={p.problem||''} onChange={e=>setProduct(idx,'problem',e.target.value)}/></div>
               
@@ -556,13 +699,6 @@ function JobForm({ initial, onSave, onSaveMultiple, onCancel }) {
         </div>
       )}
 
-      <div className="modal-footer" style={{padding:'14px 0 0 0', marginTop:'20px'}}>
-        <button className="btn btn-primary" onClick={handleSave}>
-          <i className="ti ti-device-floppy"/>
-          {isNew ? ` Save ${products.length} Job${products.length>1?'s':''}` : ' Update Job'}
-        </button>
-        <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-      </div>
     </div>
   );
 }
@@ -593,7 +729,8 @@ function JobDetailModal({ job, onEdit, onClose, onDelete }) {
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
               <div><strong>Customer:</strong> {job.customerName}</div><div><strong>Contact:</strong> {job.contact || '—'}</div>
               <div><strong>Product:</strong> {job.productName}</div><div><strong>Serial:</strong> {job.serialNo}</div>
-              <div><strong>Assigned Factory:</strong> {job.factoryName || '—'}</div><div><strong>Status:</strong> {STATUS[job.status]}</div>
+              <div><strong>Quantity:</strong> {job.quantity || '1'}</div><div><strong>Assigned Factory:</strong> {job.factoryName || '—'}</div>
+              <div><strong>Status:</strong> {STATUS[job.status]}</div>
               <div><strong>Est. Cost:</strong> {job.estimatedCost?'₹'+job.estimatedCost:'—'}</div><div><strong>Final Cost:</strong> {job.finalCost?'₹'+job.finalCost:'—'}</div>
               <div><strong>Inward Date:</strong> {fmtDate(job.inwardDate)}</div><div><strong>Factory Date:</strong> {fmtDate(job.outwardDate)}</div>
               <div><strong>Returned Date:</strong> {fmtDate(job.inwardFromFactory)}</div><div><strong>Delivered Date:</strong> {fmtDate(job.deliveredDate)}</div>
@@ -632,6 +769,41 @@ function JobDetailModal({ job, onEdit, onClose, onDelete }) {
   );
 }
 
+/* ── Form Modal — owns the sticky Save/Cancel footer outside the scroll area ── */
+function FormModal({ isNew, initial, onSave, onSaveMultiple, onClose, suggestions }) {
+  const saveRef = React.useRef(null);
+  const [label, setLabel] = React.useState(isNew ? 'Save Jobs' : 'Update Job');
+
+  return (
+    <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget) onClose();}}>
+      <div className="modal" style={{display:'flex',flexDirection:'column',maxHeight:'90vh'}}>
+        <div className="modal-header">
+          <h2>{isNew ? 'Add Sheet Log' : 'Modify Row Data'}</h2>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body" style={{flex:1,overflowY:'auto'}}>
+          <JobForm
+            initial={initial}
+            isNew={isNew}
+            onSave={onSave}
+            onSaveMultiple={onSaveMultiple}
+            onCancel={onClose}
+            saveRef={saveRef}
+            labelRef={{ current: null, set: setLabel }}
+            suggestions={suggestions}
+          />
+        </div>
+        <div className="modal-footer" style={{flexShrink:0,borderTop:'1px solid var(--border)',padding:'14px 20px',display:'flex',gap:8,background:'var(--surface)',borderRadius:'0 0 var(--radius-lg) var(--radius-lg)'}}>
+          <button className="btn btn-primary" onClick={()=>{ if(saveRef.current) saveRef.current(); }}>
+            <i className="ti ti-device-floppy"/> {label}
+          </button>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Application Entry shell wrapper ── */
 function AppWrapper() {
   const [jobs, setJobs] = useState([]);
@@ -642,13 +814,37 @@ function AppWrapper() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [page, setPage] = useState('jobs');
   const [formKey, setFormKey] = useState(0);
+  const [syncStatus, setSyncStatus] = useState(null); // { ok: bool, msg: string }
+
+  // Build autocomplete suggestion lists from all jobs
+  const suggestions = useMemo(() => {
+    const unique = (arr) => [...new Set(arr.filter(Boolean).map(s => String(s).trim()).filter(s => s.length > 0))].sort();
+    // Map customer name → their contact + address for auto-fill
+    const customerMap = {};
+    jobs.forEach(j => {
+      if (j.customerName) {
+        customerMap[String(j.customerName).trim()] = {
+          contact: j.contact || '',
+          address: j.address || ''
+        };
+      }
+    });
+    return {
+      customerNames: unique(jobs.map(j => j.customerName)),
+      contacts:      unique(jobs.map(j => j.contact)),
+      addresses:     unique(jobs.map(j => j.address)),
+      productNames:  unique(jobs.map(j => j.productName)),
+      factoryNames:  unique(jobs.map(j => j.factoryName)),
+      customerMap,
+    };
+  }, [jobs]);
 
   const loadFromSheets = async () => {
     setLoading(true);
     try {
       const res = await callBackend("getJobs");
       if (res && res.success && Array.isArray(res.jobs)) {
-        setJobs(res.jobs);
+        setJobs(res.jobs.map(normalizeJob));
       }
     } finally {
       setLoading(false);
@@ -694,26 +890,47 @@ function AppWrapper() {
   }, [jobs, search, filterStatus]);
 
   const handleSaveJob = async (updatedJob) => {
+    // Clean the job before saving — trim ID, fix status
+    const cleanJob = { ...updatedJob, id: String(updatedJob.id).trim(), status: calcStatus(updatedJob) };
+    updatedJob = cleanJob;
+    console.log("Saving job with ID:", updatedJob.id, "| Status:", updatedJob.status);
+    // Update UI immediately — match by trimmed ID
     setJobs(prev => {
-      const idx = prev.findIndex(x => x.id === updatedJob.id);
+      const idx = prev.findIndex(x => String(x.id).trim() === String(updatedJob.id).trim());
       if (idx >= 0) { const n = [...prev]; n[idx] = updatedJob; return n; }
       return [updatedJob, ...prev];
     });
     setSelected(updatedJob);
     setModal(null);
     setLoading(true);
-    await callBackend("saveJob", updatedJob);
+    setSyncStatus(null);
+    const res = await callBackend("saveJob", updatedJob);
     setLoading(false);
+    if (res.success) {
+      setSyncStatus({ ok: true, msg: "Saved to Google Sheets ✓" });
+    } else {
+      setSyncStatus({ ok: false, msg: "Sheet sync failed — data saved locally. Retry with Refresh Sheet or re-edit." });
+    }
+    setTimeout(() => setSyncStatus(null), 5000);
   };
 
   const handleSaveMultiple = async (newJobs) => {
     setJobs(prev => [...newJobs, ...prev]);
     setModal(null);
     setLoading(true);
+    setSyncStatus(null);
+    let allOk = true;
     for (const job of newJobs) {
-      await callBackend("saveJob", job);
+      const res = await callBackend("saveJob", job);
+      if (!res.success) allOk = false;
     }
     setLoading(false);
+    if (allOk) {
+      setSyncStatus({ ok: true, msg: `${newJobs.length} job${newJobs.length>1?'s':''} saved to Google Sheets ✓` });
+    } else {
+      setSyncStatus({ ok: false, msg: "Some jobs failed to sync to the sheet. Check your connection and retry." });
+    }
+    setTimeout(() => setSyncStatus(null), 6000);
   };
 
   const deleteJob = async () => {
@@ -723,13 +940,23 @@ function AppWrapper() {
     setModal(null);
     setSelected(null);
     setLoading(true);
-    await callBackend("deleteJob", { id: deletedId });
+    const res = await callBackend("deleteJob", { id: deletedId });
     setLoading(false);
+    if (!res.success) {
+      setSyncStatus({ ok: false, msg: "Delete may not have synced to sheet. Refresh to verify." });
+      setTimeout(() => setSyncStatus(null), 5000);
+    }
   };
 
   return (
     <div className="app-shell">
-      {loading && <div className="global-loader"><div className="sync-spinner"/> Syncing Google Sheets...</div>}
+      {loading && <div className="global-loader"><div className="sync-spinner"/> Syncing to Google Sheets...</div>}
+      {syncStatus && (
+        <div className="global-loader" style={{background: syncStatus.ok ? 'rgba(5,150,105,0.92)' : 'rgba(185,28,28,0.92)', bottom: 56}}>
+          <i className={`ti ${syncStatus.ok ? 'ti-circle-check' : 'ti-alert-triangle'}`}/>
+          {syncStatus.msg}
+        </div>
+      )}
       
       <nav className="sidebar">
         <div className="sidebar-logo">
@@ -804,7 +1031,7 @@ function AppWrapper() {
               </thead>
               <tbody>
                 {filtered.map(j=>(
-                  <tr key={j.id} onClick={()=>{setSelected(j); setModal('detail');}}>
+                  <tr key={j.id} onClick={()=>{setSelected(normalizeJob(j)); setModal('detail');}}>
                     <td><span className="job-id">{j.id}</span></td>
                     <td><strong>{j.customerName}</strong><div className="td-muted">{j.contact}</div></td>
                     <td>{j.productName}</td>
@@ -820,23 +1047,21 @@ function AppWrapper() {
       </div>
 
       {(modal==='new' || modal==='edit') && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h2>{modal==='new' ? 'Add Sheet Log' : 'Modify Row Data'}</h2>
-              <button className="close-btn" onClick={()=>{setModal(null); setSelected(null);}}>×</button>
-            </div>
-            <div className="modal-body">
-              <JobForm key={formKey} initial={modal==='edit'?selected:null} onSave={handleSaveJob} onSaveMultiple={handleSaveMultiple} onCancel={()=>{setModal(null); setSelected(null);}}/>
-            </div>
-          </div>
-        </div>
+        <FormModal
+          key={formKey}
+          isNew={modal==='new'}
+          initial={modal==='edit'?selected:null}
+          onSave={handleSaveJob}
+          onSaveMultiple={handleSaveMultiple}
+          onClose={()=>{setModal(null);setSelected(null);}}
+          suggestions={suggestions}
+        />
       )}
 
       {modal==='detail' && selected && (
         <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget){setModal(null);setSelected(null);}}}>
           <div className="modal">
-            <JobDetailModal job={selected} onEdit={()=>{ const fresh = jobs.find(j=>j.id===selected.id) || selected; setSelected(fresh); setModal('edit'); setFormKey(k=>k+1); }} onClose={()=>{setModal(null); setSelected(null);}} onDelete={deleteJob}/>
+            <JobDetailModal job={selected} onEdit={()=>{ const fresh = jobs.find(j=>String(j.id).trim()===String(selected.id).trim()) || selected; setSelected(normalizeJob(fresh)); setModal('edit'); setFormKey(k=>k+1); }} onClose={()=>{setModal(null); setSelected(null);}} onDelete={deleteJob}/>
           </div>
         </div>
       )}
