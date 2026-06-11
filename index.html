@@ -707,6 +707,28 @@ function JobForm({ initial, isNew, onSave, onSaveMultiple, onCancel, saveRef, la
 function JobDetailModal({ job, onEdit, onClose, onDelete }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [tab, setTab] = useState('info');
+  const [showWa, setShowWa] = useState(false);
+
+  const waMessage = () => {
+    const qty = job.quantity && job.quantity !== '1' ? ` (Qty: ${job.quantity})` : '';
+    return `Hello ${job.customerName},
+
+Your ${job.productName}${qty} (Serial No: ${job.serialNo}) has been repaired and is ready for pickup at our store.
+
+Please visit us at your earliest convenience to collect it.
+
+Thank you,
+Jigar Enterprise
+Relief Road`;
+  };
+
+  const openWhatsApp = () => {
+    const phone = String(job.contact || '').replace(/[^0-9]/g, '');
+    if (!phone) { alert('No contact number found for this customer. Please add a contact number first.'); return; }
+    const fullPhone = phone.startsWith('91') ? phone : '91' + phone;
+    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(waMessage())}`;
+    window.open(url, '_blank');
+  };
 
   return (
     <>
@@ -737,6 +759,16 @@ function JobDetailModal({ job, onEdit, onClose, onDelete }) {
             </div>
             {job.problem && <div style={{marginTop:12}}><strong>Problem Logged:</strong><p style={{fontSize:13,color:'var(--text-2)'}}>{job.problem}</p></div>}
             {job.notes && <div style={{marginTop:8}}><strong>Internal Remarks:</strong><p style={{fontSize:13,color:'var(--text-3)'}}>{job.notes}</p></div>}
+            {showWa && (
+              <div style={{marginTop:14}}>
+                <div style={{fontSize:12,fontWeight:600,color:'#166534',marginBottom:6}}><i className="ti ti-brand-whatsapp"/> Message Preview — will be sent to {job.contact}</div>
+                <div className="wa-preview">{waMessage()}</div>
+                <div style={{display:'flex',gap:8,marginTop:8}}>
+                  <button className="btn btn-whatsapp btn-sm" onClick={openWhatsApp}><i className="ti ti-send"/> Open in WhatsApp</button>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>setShowWa(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -763,6 +795,11 @@ function JobDetailModal({ job, onEdit, onClose, onDelete }) {
       <div className="modal-footer">
         <button className="btn btn-primary" onClick={onEdit}><i className="ti ti-edit"/> Edit</button>
         <button className="btn btn-secondary" onClick={()=>window.print()}><i className="ti ti-printer"/> Print Document</button>
+        {job.inwardFromFactory && !job.deliveredDate && (
+          <button className="btn btn-whatsapp" onClick={()=>{setShowWa(v=>!v); setTab('info');}}>
+            <i className="ti ti-brand-whatsapp"/> Notify Customer
+          </button>
+        )}
         {!confirmDel && <button className="btn btn-danger btn-sm" onClick={()=>setConfirmDel(true)} style={{marginLeft:'auto'}}>Delete Job</button>}
       </div>
     </>
