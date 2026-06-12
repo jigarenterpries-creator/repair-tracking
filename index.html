@@ -749,7 +749,19 @@ Relief Road`;
           <>
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:12}}><span className="job-id">{job.id}</span></div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
-              <div><strong>Customer:</strong> {job.customerName}</div><div><strong>Contact:</strong> {job.contact || '—'}</div>
+              <div><strong>Customer:</strong> {job.customerName}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <strong>Contact:</strong> {job.contact || '—'}
+                {job.contact && (
+                  <a 
+                    href={`tel:${String(job.contact).replace(/[^0-9+]/g, '')}`} 
+                    className="btn btn-sm btn-secondary" 
+                    style={{ textDecoration: 'none', padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <i className="ti ti-phone"/> Call
+                  </a>
+                )}
+              </div>
               <div><strong>Product:</strong> {job.productName}</div><div><strong>Serial:</strong> {job.serialNo}</div>
               <div><strong>Quantity:</strong> {job.quantity || '1'}</div><div><strong>Assigned Factory:</strong> {job.factoryName || '—'}</div>
               <div><strong>Status:</strong> {STATUS[job.status]}</div>
@@ -1070,7 +1082,22 @@ function AppWrapper() {
                 {filtered.map(j=>(
                   <tr key={j.id} onClick={()=>{setSelected(normalizeJob(j)); setModal('detail');}}>
                     <td><span className="job-id">{j.id}</span></td>
-                    <td><strong>{j.customerName}</strong><div className="td-muted">{j.contact}</div></td>
+                    <td>
+                      <strong>{j.customerName}</strong>
+                      <div className="td-muted" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                        <span>{j.contact || '—'}</span>
+                        {j.contact && (
+                          <a 
+                            href={`tel:${String(j.contact).replace(/[^0-9+]/g, '')}`} 
+                            onClick={(e) => e.stopPropagation()} 
+                            className="badge" 
+                            style={{ background: '#dcfce7', color: '#14532d', textDecoration: 'none', padding: '4px 8px', border: '1px solid #bbf7d0' }}
+                          >
+                            <i className="ti ti-phone" style={{ fontSize: '12px' }}/> Call
+                          </a>
+                        )}
+                      </div>
+                    </td>
                     <td>{j.productName}</td>
                     <td className="table-cols-hide job-id">{j.serialNo}</td>
                     <td className="table-cols-hide td-muted">{j.factoryName || '—'}</td>
