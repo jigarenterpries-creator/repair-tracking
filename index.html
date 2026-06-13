@@ -100,7 +100,7 @@
 
   /* Cards & Stats */
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow); }
-  .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px; }
   .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; cursor: pointer; transition: all 0.15s; text-align: left; box-shadow: var(--shadow); }
   .stat-card:hover { border-color: var(--blue-mid); }
   .stat-card.active { border-color: var(--blue); background: var(--blue-pale); }
@@ -197,7 +197,7 @@
     .sidebar { transform: translateX(-100%); transition: transform 0.25s; }
     .sidebar.open { transform: translateX(0); }
     .main { margin-left: 0; }
-    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .form-row { grid-template-columns: 1fr; }
     .topbar { padding: 12px 16px; }
     .content { padding: 14px; }
@@ -610,8 +610,8 @@ function JobForm({ initial, isNew, onSave, onSaveMultiple, onCancel, saveRef, la
           
           <div className="form-section">Service Ledger (₹)</div>
           <div className="form-row">
-            <div className="form-group"><label className="form-label" style={{color:'red'}}>Factory Cost</label><input className="form-control" type="number" value={f.estimatedCost||''} onChange={e=>set('estimatedCost',e.target.value)}/></div>
-            <div className="form-group"><label className="form-label" style={{color:'green'}}>Party Cost</label><input className="form-control" type="number" value={f.finalCost||''} onChange={e=>set('finalCost',e.target.value)}/></div>
+            <div className="form-group"><label className="form-label" style={{color:'#dc2626'}}>Factory Cost (₹)</label><input className="form-control" type="text" inputMode="decimal" value={f.estimatedCost||''} onChange={e=>set('estimatedCost',e.target.value)}/></div>
+            <div className="form-group"><label className="form-label" style={{color:'#059669'}}>Party Cost (₹)</label><input className="form-control" type="text" inputMode="decimal" value={f.finalCost||''} onChange={e=>set('finalCost',e.target.value)}/></div>
           </div>
 
           <div className="form-section">Dates Tracker</div>
@@ -655,8 +655,8 @@ function JobForm({ initial, isNew, onSave, onSaveMultiple, onCancel, saveRef, la
               <div className="form-group"><label className="form-label">Problem Reported</label><textarea className="form-control" rows={2} value={p.problem||''} onChange={e=>setProduct(idx,'problem',e.target.value)}/></div>
               
               <div className="form-row">
-                <div className="form-group"><label className="form-label" style={{color:'red'}}>Factory Cost (₹)</label><input className="form-control" type="number" value={p.estimatedCost||''} onChange={e=>setProduct(idx,'estimatedCost',e.target.value)}/></div>
-                <div className="form-group"><label className="form-label" style={{color:'green'}}>Party Cost (₹)</label><input className="form-control" type="number" value={p.finalCost||''} onChange={e=>setProduct(idx,'finalCost',e.target.value)}/></div>
+                <div className="form-group"><label className="form-label" style={{color:'#dc2626'}}>Factory Cost (₹)</label><input className="form-control" type="text" inputMode="decimal" value={p.estimatedCost||''} onChange={e=>setProduct(idx,'estimatedCost',e.target.value)}/></div>
+                <div className="form-group"><label className="form-label" style={{color:'#059669'}}>Party Cost (₹)</label><input className="form-control" type="text" inputMode="decimal" value={p.finalCost||''} onChange={e=>setProduct(idx,'finalCost',e.target.value)}/></div>
               </div>
 
               {/* Individual Itemized Product Tracking Dates */}
@@ -766,7 +766,7 @@ Location: https://maps.app.goo.gl/jTZL54582vMUoEPq7`;
               <div><strong>Product:</strong> {job.productName}</div><div><strong>Serial:</strong> {job.serialNo}</div>
               <div><strong>Quantity:</strong> {job.quantity || '1'}</div><div><strong>Assigned Factory:</strong> {job.factoryName || '—'}</div>
               <div><strong>Status:</strong> {STATUS[job.status]}</div>
-              <div><strong>Est. Cost:</strong> {job.estimatedCost?'₹'+job.estimatedCost:'—'}</div><div><strong>Final Cost:</strong> {job.finalCost?'₹'+job.finalCost:'—'}</div>
+              <div><strong>Factory Cost:</strong> {job.estimatedCost?'₹'+Number(job.estimatedCost).toLocaleString('en-IN'):'—'}</div><div><strong>Party Cost:</strong> {job.finalCost?'₹'+Number(job.finalCost).toLocaleString('en-IN'):'—'}</div>
               <div><strong>Inward Date:</strong> {fmtDate(job.inwardDate)}</div><div><strong>Factory Date:</strong> {fmtDate(job.outwardDate)}</div>
               <div><strong>Returned Date:</strong> {fmtDate(job.inwardFromFactory)}</div><div><strong>Delivered Date:</strong> {fmtDate(job.deliveredDate)}</div>
             </div>
@@ -861,7 +861,7 @@ function AppWrapper() {
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('active');
   const [page, setPage] = useState('jobs');
   const [formKey, setFormKey] = useState(0);
   const [syncStatus, setSyncStatus] = useState(null); // { ok: bool, msg: string }
@@ -923,7 +923,7 @@ function AppWrapper() {
 
     const q = safeString(search).trim();
     
-    return jobs.filter(j => {
+    const result = jobs.filter(j => {
       const matchQuery = !q || [
         safeString(j.customerName),
         safeString(j.contact),
@@ -934,9 +934,29 @@ function AppWrapper() {
       ].some(text => text.includes(q)) || 
       safeString(fmtDate(j.inwardDate)).includes(q);
       
-      const matchStatus = filterStatus === 'all' || j.status === filterStatus;
+      const matchStatus = filterStatus === 'all' || filterStatus === 'active' ? (filterStatus === 'all' ? true : filterStatus === 'active' ? j.status !== 'delivered' : j.status === filterStatus) : j.status === filterStatus;
       return matchQuery && matchStatus;
-    }).sort((a,b)=>b.id.localeCompare(a.id));
+    });
+    // Build a map of customer → their latest job ID so groups sort by most recently added
+    const latestIdByCustomer = {};
+    result.forEach(j => {
+      const key = String(j.customerName||'').toLowerCase().trim();
+      const id = String(j.id||'');
+      if (!latestIdByCustomer[key] || id.localeCompare(latestIdByCustomer[key]) > 0) {
+        latestIdByCustomer[key] = id;
+      }
+    });
+    result.sort((a,b) => {
+      const keyA = String(a.customerName||'').toLowerCase().trim();
+      const keyB = String(b.customerName||'').toLowerCase().trim();
+      const groupA = latestIdByCustomer[keyA] || '';
+      const groupB = latestIdByCustomer[keyB] || '';
+      // Primary: newest customer group on top
+      if (groupB !== groupA) return groupB.localeCompare(groupA);
+      // Secondary: within same customer, newest job first
+      return String(b.id||'').localeCompare(String(a.id||''));
+    });
+    return result;
   }, [jobs, search, filterStatus]);
 
   const handleSaveJob = async (updatedJob) => {
@@ -1033,10 +1053,10 @@ function AppWrapper() {
 
         <div className="content">
           <div className="stats-grid">
-            <button className={`stat-card ${filterStatus==='all'?'active':''}`} onClick={()=>setFilterStatus('all')}>
-              <i className="ti ti-folders stat-icon"/>
-              <div className="stat-num">{stats.all}</div>
-              <div className="stat-lbl">Total Registered</div>
+            <button className={`stat-card ${filterStatus==='active'?'active':''}`} onClick={()=>setFilterStatus('active')}>
+              <i className="ti ti-activity stat-icon"/>
+              <div className="stat-num">{stats.all - stats.delivered}</div>
+              <div className="stat-lbl">Active Jobs</div>
             </button>
             <button className={`stat-card ${filterStatus==='inward'?'active':''}`} onClick={()=>setFilterStatus('inward')}>
               <i className="ti ti-package-import stat-icon"/>
@@ -1056,7 +1076,12 @@ function AppWrapper() {
             <button className={`stat-card ${filterStatus==='delivered'?'active':''}`} onClick={()=>setFilterStatus('delivered')}>
               <i className="ti ti-circle-check stat-icon"/>
               <div className="stat-num">{stats.delivered}</div>
-              <div className="stat-lbl">Delivered Items</div>
+              <div className="stat-lbl">Delivered</div>
+            </button>
+            <button className={`stat-card ${filterStatus==='all'?'active':''}`} onClick={()=>setFilterStatus('all')}>
+              <i className="ti ti-database stat-icon"/>
+              <div className="stat-num">{stats.all}</div>
+              <div className="stat-lbl">All Records</div>
             </button>
           </div>
 
@@ -1072,42 +1097,89 @@ function AppWrapper() {
               <thead>
                 <tr>
                   <th>Job ID</th>
-                  <th>Customer</th>
                   <th>Product</th>
                   <th className="table-cols-hide">Serial No</th>
                   <th className="table-cols-hide">Factory</th>
+                  <th className="table-cols-hide" style={{color:'#dc2626'}}>Factory Cost</th>
+                  <th className="table-cols-hide" style={{color:'#059669'}}>Party Cost</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(j=>(
-                  <tr key={j.id} onClick={()=>{setSelected(normalizeJob(j)); setModal('detail');}}>
-                    <td><span className="job-id">{j.id}</span></td>
-                    <td>
-                      <strong>{j.customerName}</strong>
-                      <div className="td-muted" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                        <span>{j.contact || '—'}</span>
-                        {j.contact && (
-                          <a 
-                            href={`tel:${String(j.contact).replace(/[^0-9+]/g, '')}`} 
-                            onClick={(e) => e.stopPropagation()} 
-                            className="badge" 
-                            style={{ background: '#dcfce7', color: '#14532d', textDecoration: 'none', padding: '4px 8px', border: '1px solid #bbf7d0' }}
-                          >
-                            <i className="ti ti-phone" style={{ fontSize: '12px' }}/> Call
-                          </a>
-                        )}
-                      </div>
-                    </td>
-                    <td>{j.productName}</td>
-                    <td className="table-cols-hide job-id">{j.serialNo}</td>
-                    <td className="table-cols-hide td-muted">{j.factoryName || '—'}</td>
-                    <td><span className={`badge ${STATUS_BADGE[j.status]}`}>{STATUS[j.status]}</span></td>
-                  </tr>
-                ))}
+                {(() => {
+                  const rows = [];
+                  let lastCustomer = null;
+                  filtered.forEach(j => {
+                    const customerKey = String(j.customerName||'').trim();
+                    // Insert a customer group header row whenever customer changes
+                    if (customerKey !== lastCustomer) {
+                      lastCustomer = customerKey;
+                      const customerJobs = filtered.filter(x => String(x.customerName||'').trim() === customerKey);
+                      const totalFactory = customerJobs.reduce((s,x)=>s+(parseFloat(x.estimatedCost)||0),0);
+                      const totalParty   = customerJobs.reduce((s,x)=>s+(parseFloat(x.finalCost)||0),0);
+                      rows.push(
+                        <tr key={'grp-'+customerKey} style={{background:'var(--blue-pale)',cursor:'default'}} onClick={e=>e.stopPropagation()}>
+                          <td colSpan={2} style={{padding:'7px 14px'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8}}>
+                              <i className="ti ti-building" style={{color:'var(--blue)',fontSize:13}}/>
+                              <span style={{fontWeight:600,fontSize:13,color:'var(--blue)'}}>{j.customerName}</span>
+                              <span className="td-muted" style={{fontSize:11}}>{j.contact}</span>
+                              {j.contact && (
+                                <a href={`tel:${String(j.contact).replace(/[^0-9+]/g,'')}`}
+                                  onClick={e=>e.stopPropagation()}
+                                  className="badge"
+                                  style={{background:'#dcfce7',color:'#14532d',textDecoration:'none',padding:'2px 7px',border:'1px solid #bbf7d0',fontSize:11}}>
+                                  <i className="ti ti-phone" style={{fontSize:11}}/> Call
+                                </a>
+                              )}
+                              <span className="badge" style={{background:'var(--blue-mid)',color:'var(--blue)',fontSize:11}}>{customerJobs.length} item{customerJobs.length!==1?'s':''}</span>
+                            </div>
+                          </td>
+                          <td colSpan={2} className="table-cols-hide" style={{padding:'7px 14px'}}/>
+                          <td className="table-cols-hide" style={{padding:'7px 14px'}}>
+                            <span style={{color:'#dc2626',fontWeight:500,fontSize:12}}>₹{totalFactory.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                          </td>
+                          <td className="table-cols-hide" style={{padding:'7px 14px'}}>
+                            <span style={{color:'#059669',fontWeight:500,fontSize:12}}>₹{totalParty.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                          </td>
+                          <td style={{padding:'7px 14px'}}/>
+                        </tr>
+                      );
+                    }
+                    // Normal job row — no customer name repeated, indented slightly
+                    rows.push(
+                      <tr key={j.id} onClick={()=>{setSelected(normalizeJob(j)); setModal('detail');}} style={{borderLeft:'3px solid var(--blue-mid)'}}>
+                        <td style={{paddingLeft:20}}><span className="job-id" style={{fontSize:10}}>{j.id}</span></td>
+                        <td style={{paddingLeft:20}}>
+                          <div style={{fontSize:13}}>{j.productName}</div>
+                          {j.quantity && j.quantity !== '1' && <div className="td-muted">Qty: {j.quantity}</div>}
+                        </td>
+                        <td className="table-cols-hide td-muted">{j.serialNo || '—'}</td>
+                        <td className="table-cols-hide td-muted">{j.factoryName || '—'}</td>
+                        <td className="table-cols-hide"><span style={{color:'#dc2626',fontWeight:500}}>{j.estimatedCost?'₹'+Number(j.estimatedCost).toLocaleString('en-IN'):'—'}</span></td>
+                        <td className="table-cols-hide"><span style={{color:'#059669',fontWeight:500}}>{j.finalCost?'₹'+Number(j.finalCost).toLocaleString('en-IN'):'—'}</span></td>
+                        <td><span className={`badge ${STATUS_BADGE[j.status]}`}>{STATUS[j.status]}</span></td>
+                      </tr>
+                    );
+                  });
+                  return rows;
+                })()}
               </tbody>
             </table>
           </div>
+          {filtered.length > 0 && (
+            <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderTop:'2px solid var(--border)',borderRadius:'0 0 var(--radius-lg) var(--radius-lg)',padding:'10px 14px',display:'flex',gap:24,flexWrap:'wrap'}}>
+              <span style={{fontSize:12,color:'var(--text-3)',alignSelf:'center'}}>Showing {filtered.length} job{filtered.length!==1?'s':''}</span>
+              <span style={{fontSize:13,fontWeight:500}}>
+                <span style={{color:'var(--text-3)',marginRight:4}}>Total Factory Cost:</span>
+                <span style={{color:'#dc2626'}}>₹{filtered.reduce((s,j)=>s+(parseFloat(j.estimatedCost)||0),0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+              </span>
+              <span style={{fontSize:13,fontWeight:500}}>
+                <span style={{color:'var(--text-3)',marginRight:4}}>Total Party Cost:</span>
+                <span style={{color:'#059669'}}>₹{filtered.reduce((s,j)=>s+(parseFloat(j.finalCost)||0),0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
